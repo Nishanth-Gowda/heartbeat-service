@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package heartbeat;
+
+option go_package = "github.com/nishanth-gowda/heartbeat-service/api/pb";
+
+service Monitor {
+  // The high-frequency ping
+  rpc SendHeartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message HeartbeatRequest {
+  int32 service_id = 1;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log"
 	"log/slog"
 	"time"
 
@@ -60,7 +61,7 @@ func detectFailures(pg_repo *repository.PostgresRepository, redis_repo *reposito
 		return
 	}
 
-	slog.Info("Detected %d failures: %v", len(dead_service_ids), dead_service_ids)
+	slog.Info("Detected failures", "count", len(dead_service_ids), "service_ids", dead_service_ids)
 
 	for _, service_id := range dead_service_ids {
 		incident := models.Incident{
@@ -70,21 +71,22 @@ func detectFailures(pg_repo *repository.PostgresRepository, redis_repo *reposito
 			Details:   "Heartbeat timeout exceeded",
 		}
 		if err := pg_repo.LogIncident(ctx, incident); err != nil {
-			slog.Info("Failed to log incident for node %d: %v", service_id, err)
+			slog.Error("Failed to log incident", "service_id", service_id, "error", err)
 			continue // Don't remove from Redis if DB write failed (try again next tick)
 		}
 
-		// Update Service Status
-		if err := pg_repo.SetServiceStatus(ctx, service_id, models.StatusDown); err != nil {
-			slog.Info("Failed to update status for node %d: %v", service_id, err)
+		// Mark as DOWN in Redis Set (NEW STEP!)
+		// This allows the API to detect when it comes back up.
+		if err := redis_repo.MarkNodeDown(ctx, service_id); err != nil {
+			log.Printf("Failed to mark node down in Redis: %v", err)
 		}
 
 		// remove from redis
 		if err := redis_repo.RemoveService(ctx, service_id); err != nil {
-			slog.Info("Failed to remove service %d from Redis: %v", service_id, err)
+			slog.Error("Failed to remove service from Redis", "service_id", service_id, "error", err)
 		}
 
 		// send alert
-		slog.Info("Sending alert for service %d", service_id)
+		slog.Info("Sending alert", "service_id", service_id)
 	}
 }

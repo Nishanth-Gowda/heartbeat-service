@@ -60,3 +60,31 @@ func (r *RedisRepository) RemoveService(ctx context.Context, service_id int) err
 
 	return nil
 }
+
+func (r *RedisRepository) RegisterHeartbeat(ctx context.Context, service_id int) error {
+	_, err := r.rdb.ZAdd(ctx, "heartbeats", redis.Z{
+		Score:  float64(time.Now().Unix()),
+		Member: service_id,
+	}).Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsNodeDown checks if a node is currently marked as failed in our cache
+func (r *RedisRepository) IsNodeDown(ctx context.Context, serviceID int) bool {
+    // SISMEMBER checks if the element exists in the set
+    val, _ := r.rdb.SIsMember(ctx, "service:down", strconv.Itoa(serviceID)).Result()
+    return val
+}
+
+// MarkNodeUp removes the node from the "down" list (it has recovered)
+func (r *RedisRepository) MarkNodeUp(ctx context.Context, serviceID int) error {
+    return r.rdb.SRem(ctx, "service:down", strconv.Itoa(serviceID)).Err()
+}
+
+// MarkNodeDown adds the node to the "down" list (called by the Worker)
+func (r *RedisRepository) MarkNodeDown(ctx context.Context, serviceID int) error {
+    return r.rdb.SAdd(ctx, "service:down", strconv.Itoa(serviceID)).Err()
+}
