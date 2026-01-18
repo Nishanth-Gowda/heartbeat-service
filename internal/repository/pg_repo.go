@@ -18,7 +18,6 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 }
 
 // --- 1. Service Management ---
-
 func (r *PostgresRepository) RegisterService(ctx context.Context, req models.RegisterServiceRequest) (models.Service, error) {
 	var s models.Service
 	// SQL: INSERT INTO services (service_name, service_url, region) VALUES (?, ?, ?)
@@ -56,6 +55,45 @@ func (r *PostgresRepository) GetIncidentHistory(ctx context.Context, serviceID i
 	// SQL: SELECT * FROM incident_log WHERE service_id = ? ORDER BY event_time DESC LIMIT ?
 	fmt.Printf("DB: Fetching incident history for service %d\n", serviceID)
 	return incidents, nil
+}
+
+func (r *PostgresRepository) LogIncident(ctx context.Context, incident models.Incident) error {
+	// SQL: INSERT INTO incident_log (service_id, event_type, event_time, details) VALUES (?, ?, ?, ?)
+
+	query := `
+		INSERT INTO incident_log (service_id, event_type, event_time, details)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		incident.ServiceID,
+		incident.Type,
+		incident.Time,
+		incident.Details)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("DB: Logging incident for service %d: %s\n", incident.ServiceID, incident.Type)
+	return nil
+}
+
+func (r *PostgresRepository) SetServiceStatus(ctx context.Context, serviceID int, status models.ServiceStatus) error {
+	// SQL: UPDATE services SET status = ? WHERE id = ?
+	query := `
+		UPDATE services
+		SET status = $1
+		WHERE id = $2
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		status,
+		serviceID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // --- 4. Health Check ---
